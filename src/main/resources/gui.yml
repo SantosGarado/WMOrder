@@ -37,6 +37,9 @@ buttons:
   create-amount: {material: PAPER, name: "<yellow>Amount", lore: ["<gray>Amount: <white><amount>", "", "<yellow>Click to set amount"]}
   create-price: {material: GOLD_INGOT, name: "<gold>Price", lore: ["<gray>Price each: <green><price>", "", "<yellow>Click to set price"]}
   create-decline: {material: RED_CONCRETE, name: "<red>Decline", lore: ["<gray>Cancel this order"]}
+  create-item-search: {material: COMPASS, name: "<green>Search", lore: ["<gray>Search items by name"]}
+  create-item-filter: {material: HOPPER, name: "<yellow>Filter: <white><filter>", lore: ["<gray>Click to change category"]}
+  create-item-clear: {material: BARRIER, name: "<red>Clear Search & Filter", lore: ["<gray>Show all items again"]}
   collection: {material: CHEST, name: "<green>Collection", lore: ["<gray>Click to collect safely"]}
   history: {material: WRITABLE_BOOK, name: "<yellow>History"}
   confirm: {material: LIME_CONCRETE, name: "<green>Confirm"}
