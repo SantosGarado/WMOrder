@@ -16,6 +16,9 @@ menus:
   create:
     title: "<dark_gray>Create Buy Order"
     size: 27
+  create-item-browser:
+    title: "<dark_gray>Select Item • Page <page>"
+    size: 54
   details:
     title: "<dark_gray>Order <order>"
     size: 27
