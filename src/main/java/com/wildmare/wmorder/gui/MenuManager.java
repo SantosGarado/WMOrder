@@ -52,7 +52,13 @@ public final class MenuManager {
         inv.setItem(46,toggleIcon(query.fulfillableOnly()));session.action(46,GuiAction.simple(GuiAction.Type.TOGGLE_FULFILLABLE));
         inv.setItem(47,categoryIcon(query.category()));session.action(47,GuiAction.simple(GuiAction.Type.CYCLE_CATEGORY));
         inv.setItem(48,sortIcon(query.sort()));session.action(48,GuiAction.simple(GuiAction.Type.CYCLE_SORT));
-        inv.setItem(49,items.button("my-orders",Map.of()));session.action(49,GuiAction.simple(GuiAction.Type.MY_ORDERS));
+if(type == MenuType.MY_ORDERS){
+    inv.setItem(49,items.button("create-order",Map.of()));
+    session.action(49,GuiAction.simple(GuiAction.Type.CREATE_OPEN));
+}else{
+    inv.setItem(49,items.button("my-orders",Map.of()));
+    session.action(49,GuiAction.simple(GuiAction.Type.MY_ORDERS));
+}
         inv.setItem(50,items.button("search",Map.of()));session.action(50,GuiAction.simple(GuiAction.Type.SEARCH));
         inv.setItem(51,items.button("collection",Map.of()));session.action(51,GuiAction.simple(GuiAction.Type.COLLECTION));
         inv.setItem(52,items.button("refresh",Map.of()));session.action(52,GuiAction.simple(GuiAction.Type.REFRESH));
