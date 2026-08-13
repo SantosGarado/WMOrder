@@ -1,20 +1,17 @@
 package com.wildmare.wmorder.gui.input;
 
-import io.papermc.paper.event.packet.UncheckedSignChangeEvent;
 import io.papermc.paper.event.player.AsyncChatEvent;
-import io.papermc.paper.math.Position;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.block.BlockState;
+import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
-import org.bukkit.block.TileState;
-import org.bukkit.block.data.BlockData;
 import org.bukkit.block.sign.Side;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
+import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
@@ -26,168 +23,303 @@ import java.util.function.Consumer;
 
 public final class ChatInputManager implements Listener {
 
-    private record SignInput(Location location, Consumer<String> callback) {}
+    private record SignInput(
+            Location location,
+            Consumer<String> callback
+    ) {}
 
     private final Plugin plugin;
-    private final Map<UUID,Consumer<String>> inputs=new ConcurrentHashMap<>();
-    private final Map<UUID,SignInput> signInputs=new ConcurrentHashMap<>();
-    private final PlainTextComponentSerializer plain=PlainTextComponentSerializer.plainText();
 
-    public ChatInputManager(Plugin plugin){
-        this.plugin=plugin;
+    private final Map<UUID, Consumer<String>> inputs =
+            new ConcurrentHashMap<>();
+
+    private final Map<UUID, SignInput> signInputs =
+            new ConcurrentHashMap<>();
+
+    private final PlainTextComponentSerializer plain =
+            PlainTextComponentSerializer.plainText();
+
+    public ChatInputManager(Plugin plugin) {
+        this.plugin = plugin;
     }
 
-    public void request(Player player,Consumer<String> callback){
+    public void request(
+            Player player,
+            Consumer<String> callback
+    ) {
         cancel(player.getUniqueId());
-        inputs.put(player.getUniqueId(),callback);
-        player.closeInventory();
-    }
 
-    public void requestSign(Player player,String initialText,Consumer<String> callback){
-        cancel(player.getUniqueId());
-        player.closeInventory();
-
-        Location location=player.getLocation().getBlock().getLocation();
-
-        int y=Math.max(
-                player.getWorld().getMinHeight()+1,
-                Math.min(player.getWorld().getMaxHeight()-2,location.getBlockY()-4)
-        );
-
-        location.setY(y);
-
-        BlockData signData=Material.OAK_SIGN.createBlockData();
-        BlockState blockState=signData.createBlockState();
-
-        if(!(blockState instanceof Sign sign)){
-            callback.accept("");
-            return;
-        }
-
-        sign.getSide(Side.FRONT).line(
-                0,
-                Component.text(initialText==null?"":initialText)
-        );
-
-        player.sendBlockChange(location,signData);
-        player.sendBlockUpdate(location,sign);
-
-        signInputs.put(
+        inputs.put(
                 player.getUniqueId(),
-                new SignInput(location.clone(),callback)
+                callback
         );
 
-        player.openVirtualSign(
-                Position.block(location),
-                Side.FRONT
-        );
+        player.closeInventory();
     }
 
-    public boolean active(UUID player){
-        return inputs.containsKey(player) || signInputs.containsKey(player);
+    public void requestSign(
+            Player player,
+            String initialText,
+            Consumer<String> callback
+    ) {
+        UUID uuid = player.getUniqueId();
+
+        cancel(uuid);
+        player.closeInventory();
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+
+            if (!player.isOnline()) {
+                return;
+            }
+
+            Location location = findSignLocation(player);
+
+            if (location == null) {
+                callback.accept("");
+                return;
+            }
+
+            Block block = location.getBlock();
+
+            block.setType(
+                    Material.OAK_SIGN,
+                    false
+            );
+
+            if (!(block.getState() instanceof Sign sign)) {
+
+                block.setType(
+                        Material.AIR,
+                        false
+                );
+
+                callback.accept("");
+                return;
+            }
+
+            sign.getSide(Side.FRONT).line(
+                    0,
+                    Component.text(
+                            initialText == null
+                                    ? ""
+                                    : initialText
+                    )
+            );
+
+            sign.update(true, false);
+
+            SignInput request =
+                    new SignInput(
+                            location.clone(),
+                            callback
+                    );
+
+            signInputs.put(
+                    uuid,
+                    request
+            );
+
+            player.openSign(
+                    sign,
+                    Side.FRONT
+            );
+        });
     }
 
-    public void cancel(UUID player){
+    public boolean active(UUID player) {
+        return inputs.containsKey(player)
+                || signInputs.containsKey(player);
+    }
+
+    public void cancel(UUID player) {
+
         inputs.remove(player);
 
-        SignInput sign=signInputs.remove(player);
+        SignInput sign =
+                signInputs.remove(player);
 
-        if(sign!=null){
-            Player online=Bukkit.getPlayer(player);
-
-            if(online!=null){
-                restore(online,sign.location());
-            }
+        if (sign != null) {
+            restore(sign.location());
         }
     }
 
-    public void clear(){
-        for(Map.Entry<UUID,SignInput> entry:signInputs.entrySet()){
-            Player player=Bukkit.getPlayer(entry.getKey());
+    public void clear() {
 
-            if(player!=null){
-                restore(player,entry.getValue().location());
-            }
+        for (SignInput input : signInputs.values()) {
+            restore(input.location());
         }
 
         inputs.clear();
         signInputs.clear();
     }
 
-    @EventHandler(priority=EventPriority.HIGHEST)
-    public void chat(AsyncChatEvent event){
-        Consumer<String> callback=inputs.remove(
-                event.getPlayer().getUniqueId()
-        );
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void chat(AsyncChatEvent event) {
 
-        if(callback==null)return;
+        Consumer<String> callback =
+                inputs.remove(
+                        event.getPlayer()
+                                .getUniqueId()
+                );
+
+        if (callback == null) {
+            return;
+        }
 
         event.setCancelled(true);
 
-        String text=plain.serialize(event.message()).trim();
+        String text =
+                plain.serialize(
+                        event.message()
+                ).trim();
 
         Bukkit.getScheduler().runTask(
                 plugin,
-                ()->callback.accept(text)
+                () -> callback.accept(text)
         );
     }
 
-    @EventHandler(priority=EventPriority.HIGHEST)
-    public void sign(UncheckedSignChangeEvent event){
-        UUID uuid=event.getPlayer().getUniqueId();
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void sign(SignChangeEvent event) {
 
-        SignInput request=signInputs.get(uuid);
+        UUID uuid =
+                event.getPlayer()
+                        .getUniqueId();
 
-        if(request==null)return;
+        SignInput request =
+                signInputs.get(uuid);
 
-        if(!event.getEditedBlockPosition().equals(
-                Position.block(request.location())
-        )){
+        if (request == null) {
+            return;
+        }
+
+        if (!event.getBlock()
+                .getLocation()
+                .equals(request.location())) {
+            return;
+        }
+
+        if (event.getSide() != Side.FRONT) {
             return;
         }
 
         signInputs.remove(uuid);
+
         event.setCancelled(true);
 
-        String text=event.lines().stream()
-                .map(plain::serialize)
-                .map(String::trim)
-                .filter(line->!line.isEmpty())
-                .findFirst()
-                .orElse("");
+        String text =
+                event.lines()
+                        .stream()
+                        .map(plain::serialize)
+                        .map(String::trim)
+                        .filter(line -> !line.isEmpty())
+                        .findFirst()
+                        .orElse("");
 
-        Bukkit.getScheduler().runTask(plugin,()->{
-            restore(event.getPlayer(),request.location());
-            request.callback().accept(text);
-        });
+        Bukkit.getScheduler().runTask(
+                plugin,
+                () -> {
+                    restore(request.location());
+                    request.callback().accept(text);
+                }
+        );
     }
 
     @EventHandler(
-            priority=EventPriority.HIGHEST,
-            ignoreCancelled=true
+            priority = EventPriority.HIGHEST,
+            ignoreCancelled = true
     )
-    public void open(InventoryOpenEvent event){
-        if(active(event.getPlayer().getUniqueId())){
+    public void open(InventoryOpenEvent event) {
+
+        if (active(
+                event.getPlayer()
+                        .getUniqueId()
+        )) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler
-    public void quit(PlayerQuitEvent event){
-        inputs.remove(event.getPlayer().getUniqueId());
-        signInputs.remove(event.getPlayer().getUniqueId());
+    public void quit(PlayerQuitEvent event) {
+
+        UUID uuid =
+                event.getPlayer()
+                        .getUniqueId();
+
+        inputs.remove(uuid);
+
+        SignInput sign =
+                signInputs.remove(uuid);
+
+        if (sign != null) {
+            restore(sign.location());
+        }
     }
 
-    private void restore(Player player,Location location){
-        player.sendBlockChange(
-                location,
-                location.getBlock().getBlockData()
-        );
+    private Location findSignLocation(Player player) {
 
-        BlockState state=location.getBlock().getState();
+        Location base =
+                player.getLocation()
+                        .getBlock()
+                        .getLocation();
 
-        if(state instanceof TileState tile){
-            player.sendBlockUpdate(location,tile);
+        int minY =
+                player.getWorld()
+                        .getMinHeight() + 1;
+
+        int maxY =
+                player.getWorld()
+                        .getMaxHeight() - 2;
+
+        for (int dy = 2; dy <= 6; dy++) {
+
+            int y =
+                    base.getBlockY() + dy;
+
+            if (y < minY || y > maxY) {
+                continue;
+            }
+
+            for (int dx = -2; dx <= 2; dx++) {
+
+                for (int dz = -2; dz <= 2; dz++) {
+
+                    Location location =
+                            new Location(
+                                    player.getWorld(),
+                                    base.getBlockX() + dx,
+                                    y,
+                                    base.getBlockZ() + dz
+                            );
+
+                    if (location
+                            .getBlock()
+                            .getType()
+                            .isAir()) {
+
+                        return location;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private void restore(Location location) {
+
+        if (location
+                .getBlock()
+                .getType()
+                == Material.OAK_SIGN) {
+
+            location
+                    .getBlock()
+                    .setType(
+                            Material.AIR,
+                            false
+                    );
         }
     }
 }
