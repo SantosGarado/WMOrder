@@ -280,6 +280,7 @@ case CREATE_ITEM_SELECT -> {
                 OrderQuery updated=new OrderQuery(current.search(),nextCategory(current.category()),current.material(),current.buyerUuid(),current.statuses(),current.sort(),current.fulfillableOnly(),0,current.pageSize());
                 openBrowser(player,updated,session.type());
             }
+            case CREATE_AMOUNT -> requestAmount(player,session.createState());
             case CREATE_QUANTITY -> adjustQuantity(player,session.createState(),action.amount());
             case CREATE_PRICE -> requestPrice(player,session.createState());
             case CREATE_CONFIRM -> confirmCreate(player,session.createState());
@@ -295,6 +296,44 @@ case CREATE_ITEM_SELECT -> {
 
     private void refresh(Player player,MenuSession session){long now=System.currentTimeMillis(),previous=lastRefresh.getOrDefault(player.getUniqueId(),0L),cooldown=configs.settings().performance().guiRefreshCooldownMillis();if(now-previous<cooldown&&!player.hasPermission("wmorder.bypass.cooldown")){failure(player,"cooldown",Long.toString((cooldown-(now-previous)+999)/1000));return;}lastRefresh.put(player.getUniqueId(),now);queries.invalidate();if(session.type()==MenuType.COLLECTION)openCollection(player);else if(session.type()==MenuType.HISTORY)openHistory(player,0);else openBrowser(player,session.query(),session.type());}
     private void requestSearch(Player player,OrderQuery query,MenuType type){if(!searchLimiter.tryAcquire(player.getUniqueId())){messages.send(player,"search-rate-limited");return;}messages.send(player,"input-search");inputs.request(player,text->{if(text.equalsIgnoreCase("cancel")){messages.send(player,"input-cancelled");openBrowser(player,query,type);}else openBrowser(player,query.withSearch(text),type);});}
+    private void requestAmount(Player player,CreateState state){
+    LimitProfile profile=limits.resolve(player);
+    long max=profile.maxQuantityPerOrder();
+
+    inputs.requestSign(
+            player,
+            String.valueOf(state.quantity()),
+            text->{
+                String value=text.trim().replace(",","");
+
+                if(value.isEmpty()){
+                    openCreate(player,state);
+                    return;
+                }
+
+                try{
+                    long amount=Long.parseLong(value);
+
+                    if(amount<1 || amount>max){
+                        messages.send(
+                                player,
+                                "invalid-quantity",
+                                Map.of("min",1,"max",max)
+                        );
+                        openCreate(player,state);
+                        return;
+                    }
+
+                    state.quantity(amount);
+                    openCreate(player,state);
+
+                }catch(NumberFormatException e){
+                    messages.send(player,"invalid-number");
+                    openCreate(player,state);
+                }
+            }
+    );
+}
     private void requestPrice(Player player,CreateState state){messages.send(player,"input-price");inputs.request(player,text->{if(text.equalsIgnoreCase("cancel")){messages.send(player,"input-cancelled");openCreate(player,state);return;}try{BigDecimal price=money.normalize(new BigDecimal(text.replace(",","")));if(price.signum()<=0)throw new NumberFormatException();state.price(price);openCreate(player,state);}catch(NumberFormatException|ArithmeticException e){messages.send(player,"invalid-number");openCreate(player,state);}});}
     private void adjustQuantity(Player player,CreateState state,long delta){LimitProfile profile=limits.resolve(player);long max=profile.maxQuantityPerOrder();long updated;try{updated=Math.addExact(state.quantity(),delta);}catch(ArithmeticException e){updated=delta>0?max:1;}state.quantity(Math.max(1,Math.min(max,updated)));openCreate(player,state);}
 
