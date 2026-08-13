@@ -250,6 +250,26 @@ private void openCreateItemBrowser(Player player,CreateState state,int page){
             case MY_ORDERS -> openMyOrders(player);
             case CREATE_OPEN -> openCreate(player);
             case CREATE_DECLINE -> openMyOrders(player);
+            case CREATE_ITEM -> openCreateItemBrowser(player,session.createState(),0);
+
+case CREATE_ITEM_PREVIOUS,CREATE_ITEM_NEXT ->
+        openCreateItemBrowser(player,session.createState(),(int)action.amount());
+
+case CREATE_ITEM_SELECT -> {
+    Material material=Material.matchMaterial(action.value());
+
+    if(material==null || !material.isItem() || material.isAir()){
+        failure(player,"invalid_item","Invalid item");
+        openCreate(player,session.createState());
+        break;
+    }
+
+    CreateState state=session.createState();
+    state.item(new ItemStack(material));
+    state.category(configs.categories().categoryFor(material));
+
+    openCreate(player,state);
+}
             case COLLECTION -> openCollection(player);
             case HISTORY -> openHistory(player,0);
             case DETAILS -> openDetails(player,action.orderId());
