@@ -114,6 +114,7 @@ public final class MenuManager {
             case REFRESH -> refresh(player,session);
             case SEARCH -> requestSearch(player,session.query(),session.type());
             case MY_ORDERS -> openMyOrders(player);
+            case CREATE_OPEN -> openCreate(player);
             case COLLECTION -> openCollection(player);
             case HISTORY -> openHistory(player,0);
             case DETAILS -> openDetails(player,action.orderId());
