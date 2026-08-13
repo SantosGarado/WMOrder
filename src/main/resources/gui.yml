@@ -29,6 +29,7 @@ buttons:
   refresh: {material: CLOCK, name: "<aqua>Refresh", lore: ["<gray>Reload this menu"]}
   search: {material: COMPASS, name: "<green>Search", lore: ["<gray>Search by item or buyer"]}
   my-orders: {material: BOOK, name: "<gold>My Orders"}
+  create-order: {material: EMERALD, name: "<green>Create New Order", lore: ["<gray>Click to create a new buy order"]}
   collection: {material: CHEST, name: "<green>Collection", lore: ["<gray>Click to collect safely"]}
   history: {material: WRITABLE_BOOK, name: "<yellow>History"}
   confirm: {material: LIME_CONCRETE, name: "<green>Confirm"}
