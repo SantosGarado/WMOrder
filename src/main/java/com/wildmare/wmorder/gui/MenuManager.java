@@ -148,9 +148,38 @@ private void openCreate(Player player,CreateState state){
 }
 
 private void openCreateItemBrowser(Player player,CreateState state,int page){
+    openCreateItemBrowser(player,state,page,"","ALL");
+}
+
+private void openCreateItemBrowser(
+        Player player,
+        CreateState state,
+        int page,
+        String search,
+        String filter
+){
+    String normalizedSearch=search==null
+            ? ""
+            : search.trim()
+                    .toLowerCase(Locale.ROOT)
+                    .replace(" ","_");
+
+    String activeFilter=filter==null
+            ? "ALL"
+            : filter.toUpperCase(Locale.ROOT);
+
     List<Material> materials=Arrays.stream(Material.values())
             .filter(Material::isItem)
             .filter(material -> !material.isAir())
+            .filter(material ->
+                    normalizedSearch.isEmpty()
+                            || material.name()
+                            .toLowerCase(Locale.ROOT)
+                            .contains(normalizedSearch)
+            )
+            .filter(material ->
+                    matchesCreateItemFilter(material,activeFilter)
+            )
             .sorted(Comparator.comparing(Material::name))
             .toList();
 
@@ -158,13 +187,22 @@ private void openCreateItemBrowser(Player player,CreateState state,int page){
     int maxPage=Math.max(0,(materials.size()-1)/pageSize);
     page=Math.max(0,Math.min(page,maxPage));
 
-    MenuSession session=sessions.create(player,MenuType.CREATE_ITEM_BROWSER);
+    MenuSession session=sessions.create(
+            player,
+            MenuType.CREATE_ITEM_BROWSER
+    );
+
     session.createState(state);
+    session.itemSearch(search);
+    session.itemFilter(activeFilter);
 
     Inventory inv=createInventory(
             session,
             "create-item-browser",
-            Map.of("page",page+1,"order","")
+            Map.of(
+                    "page",page+1,
+                    "order",""
+            )
     );
 
     int start=page*pageSize;
@@ -177,14 +215,17 @@ private void openCreateItemBrowser(Player player,CreateState state,int page){
         ItemStack icon=new ItemStack(material);
         ItemMeta meta=icon.getItemMeta();
 
-        meta.displayName(messages.renderRaw(
-                "<white>"+material.name(),
-                Map.of()
-        ));
+        meta.displayName(
+                messages.renderRaw(
+                        "<white>"+prettyMaterialName(material),
+                        Map.of()
+                )
+        );
 
         icon.setItemMeta(meta);
 
         inv.setItem(slot,icon);
+
         session.action(
                 slot,
                 new GuiAction(
@@ -196,11 +237,22 @@ private void openCreateItemBrowser(Player player,CreateState state,int page){
         );
     }
 
+    if(materials.isEmpty()){
+        inv.setItem(
+                22,
+                items.button("empty",Map.of())
+        );
+    }
+
     if(page>0){
         inv.setItem(
                 45,
-                items.button("previous",Map.of("page",page))
+                items.button(
+                        "previous",
+                        Map.of("page",page)
+                )
         );
+
         session.action(
                 45,
                 new GuiAction(
@@ -212,11 +264,63 @@ private void openCreateItemBrowser(Player player,CreateState state,int page){
         );
     }
 
+    inv.setItem(
+            47,
+            items.button(
+                    "create-item-filter",
+                    Map.of(
+                            "filter",
+                            prettyFilterName(activeFilter)
+                    )
+            )
+    );
+
+    session.action(
+            47,
+            GuiAction.simple(
+                    GuiAction.Type.CREATE_ITEM_FILTER
+            )
+    );
+
+    inv.setItem(
+            49,
+            items.button(
+                    "create-item-search",
+                    Map.of()
+            )
+    );
+
+    session.action(
+            49,
+            GuiAction.simple(
+                    GuiAction.Type.CREATE_ITEM_SEARCH
+            )
+    );
+
+    inv.setItem(
+            51,
+            items.button(
+                    "create-item-clear",
+                    Map.of()
+            )
+    );
+
+    session.action(
+            51,
+            GuiAction.simple(
+                    GuiAction.Type.CREATE_ITEM_CLEAR
+            )
+    );
+
     if(page<maxPage){
         inv.setItem(
                 53,
-                items.button("next",Map.of("page",page+2))
+                items.button(
+                        "next",
+                        Map.of("page",page+2)
+                )
         );
+
         session.action(
                 53,
                 new GuiAction(
@@ -230,6 +334,139 @@ private void openCreateItemBrowser(Player player,CreateState state,int page){
 
     items.fill(inv);
     player.openInventory(inv);
+}
+    
+private String prettyMaterialName(Material material){
+    String[] words=material.name()
+            .toLowerCase(Locale.ROOT)
+            .split("_");
+
+    StringBuilder result=new StringBuilder();
+
+    for(String word:words){
+        if(word.isEmpty()){
+            continue;
+        }
+
+        if(!result.isEmpty()){
+            result.append(' ');
+        }
+
+        result.append(
+                Character.toUpperCase(word.charAt(0))
+        );
+
+        if(word.length()>1){
+            result.append(word.substring(1));
+        }
+    }
+
+    return result.toString();
+}
+
+private String prettyFilterName(String filter){
+    return switch(filter){
+        case "SPAWN_EGGS" -> "Spawn Eggs";
+        case "REDSTONE" -> "Redstone";
+        case "BLOCKS" -> "Blocks";
+        case "TOOLS" -> "Tools";
+        case "COMBAT" -> "Combat";
+        case "ARMOR" -> "Armor";
+        case "FOOD" -> "Food";
+        case "SPECIAL" -> "Special";
+        case "MISC" -> "Misc";
+        default -> "All";
+    };
+}
+
+private boolean matchesCreateItemFilter(
+        Material material,
+        String filter
+){
+    String name=material.name();
+
+    return switch(filter){
+        case "BLOCKS" ->
+                material.isBlock();
+
+        case "TOOLS" ->
+                name.endsWith("_PICKAXE")
+                        || name.endsWith("_AXE")
+                        || name.endsWith("_SHOVEL")
+                        || name.endsWith("_HOE")
+                        || name.equals("SHEARS")
+                        || name.equals("FISHING_ROD")
+                        || name.equals("BRUSH")
+                        || name.equals("FLINT_AND_STEEL");
+
+        case "COMBAT" ->
+                name.endsWith("_SWORD")
+                        || name.equals("BOW")
+                        || name.equals("CROSSBOW")
+                        || name.equals("TRIDENT")
+                        || name.equals("MACE")
+                        || name.equals("SHIELD")
+                        || name.equals("ARROW")
+                        || name.equals("SPECTRAL_ARROW")
+                        || name.equals("TIPPED_ARROW");
+
+        case "ARMOR" ->
+                name.endsWith("_HELMET")
+                        || name.endsWith("_CHESTPLATE")
+                        || name.endsWith("_LEGGINGS")
+                        || name.endsWith("_BOOTS")
+                        || name.endsWith("_HORSE_ARMOR")
+                        || name.equals("ELYTRA")
+                        || name.equals("WOLF_ARMOR");
+
+        case "FOOD" ->
+                material.isEdible();
+
+        case "REDSTONE" ->
+                name.contains("REDSTONE")
+                        || name.contains("REPEATER")
+                        || name.contains("COMPARATOR")
+                        || name.contains("PISTON")
+                        || name.contains("OBSERVER")
+                        || name.contains("DISPENSER")
+                        || name.contains("DROPPER")
+                        || name.contains("HOPPER")
+                        || name.contains("LEVER")
+                        || name.contains("PRESSURE_PLATE")
+                        || name.contains("TRIPWIRE")
+                        || name.contains("TARGET")
+                        || name.contains("DAYLIGHT_DETECTOR")
+                        || name.contains("SCULK_SENSOR")
+                        || name.contains("RAIL");
+
+        case "SPAWN_EGGS" ->
+                name.endsWith("_SPAWN_EGG");
+
+        case "SPECIAL" ->
+                name.contains("COMMAND_BLOCK")
+                        || name.equals("BARRIER")
+                        || name.equals("STRUCTURE_BLOCK")
+                        || name.equals("STRUCTURE_VOID")
+                        || name.equals("JIGSAW")
+                        || name.equals("LIGHT")
+                        || name.equals("DEBUG_STICK")
+                        || name.equals("KNOWLEDGE_BOOK")
+                        || name.equals("BEDROCK")
+                        || name.equals("SPAWNER")
+                        || name.equals("TRIAL_SPAWNER");
+
+        case "MISC" ->
+                !material.isBlock()
+                        && !material.isEdible()
+                        && !name.endsWith("_SPAWN_EGG")
+                        && !matchesCreateItemFilter(material,"TOOLS")
+                        && !matchesCreateItemFilter(material,"COMBAT")
+                        && !matchesCreateItemFilter(material,"ARMOR")
+                        && !matchesCreateItemFilter(material,"REDSTONE")
+                        && !matchesCreateItemFilter(material,"SPECIAL");
+
+        default -> true;
+    };
 }
     
     public void openDetails(Player player,UUID orderId){queries.find(orderId).thenAccept(optional->MainThread.run(plugin,()->{
