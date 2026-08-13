@@ -147,6 +147,91 @@ private void openCreate(Player player,CreateState state){
     player.openInventory(inv);
 }
 
+private void openCreateItemBrowser(Player player,CreateState state,int page){
+    List<Material> materials=Arrays.stream(Material.values())
+            .filter(Material::isItem)
+            .filter(material -> !material.isAir())
+            .sorted(Comparator.comparing(Material::name))
+            .toList();
+
+    int pageSize=45;
+    int maxPage=Math.max(0,(materials.size()-1)/pageSize);
+    page=Math.max(0,Math.min(page,maxPage));
+
+    MenuSession session=sessions.create(player,MenuType.CREATE_ITEM_BROWSER);
+    session.createState(state);
+
+    Inventory inv=createInventory(
+            session,
+            "create-item-browser",
+            Map.of("page",page+1,"order","")
+    );
+
+    int start=page*pageSize;
+    int end=Math.min(start+pageSize,materials.size());
+
+    for(int index=start;index<end;index++){
+        Material material=materials.get(index);
+        int slot=index-start;
+
+        ItemStack icon=new ItemStack(material);
+        ItemMeta meta=icon.getItemMeta();
+
+        meta.displayName(messages.renderRaw(
+                "<white>"+material.name(),
+                Map.of()
+        ));
+
+        icon.setItemMeta(meta);
+
+        inv.setItem(slot,icon);
+        session.action(
+                slot,
+                new GuiAction(
+                        GuiAction.Type.CREATE_ITEM_SELECT,
+                        null,
+                        0,
+                        material.name()
+                )
+        );
+    }
+
+    if(page>0){
+        inv.setItem(
+                45,
+                items.button("previous",Map.of("page",page))
+        );
+        session.action(
+                45,
+                new GuiAction(
+                        GuiAction.Type.CREATE_ITEM_PREVIOUS,
+                        null,
+                        page-1,
+                        null
+                )
+        );
+    }
+
+    if(page<maxPage){
+        inv.setItem(
+                53,
+                items.button("next",Map.of("page",page+2))
+        );
+        session.action(
+                53,
+                new GuiAction(
+                        GuiAction.Type.CREATE_ITEM_NEXT,
+                        null,
+                        page+1,
+                        null
+                )
+        );
+    }
+
+    items.fill(inv);
+    player.openInventory(inv);
+}
+    
     public void openDetails(Player player,UUID orderId){queries.find(orderId).thenAccept(optional->MainThread.run(plugin,()->{
         if(optional.isEmpty()){failure(player,"order_not_found","Order not found");return;}BuyOrder order=optional.get();MenuSession session=sessions.create(player,MenuType.DETAILS);Inventory inv=createInventory(session,"details",Map.of("order",OrderService.shortId(order.id()),"page",1));
         ItemStack icon=serializer.deserialize(order.itemBlob());icon.setAmount(1);appendLore(icon,orderLore(order));inv.setItem(13,icon);
