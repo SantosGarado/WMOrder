@@ -379,6 +379,35 @@ private String prettyFilterName(String filter){
     };
 }
 
+private String nextCreateItemFilter(String current){
+    List<String> filters=List.of(
+            "ALL",
+            "BLOCKS",
+            "TOOLS",
+            "COMBAT",
+            "ARMOR",
+            "FOOD",
+            "REDSTONE",
+            "SPAWN_EGGS",
+            "SPECIAL",
+            "MISC"
+    );
+
+    int index=filters.indexOf(
+            current==null
+                    ? "ALL"
+                    : current.toUpperCase(Locale.ROOT)
+    );
+
+    if(index<0){
+        return "ALL";
+    }
+
+    return filters.get(
+            (index+1)%filters.size()
+    );
+}
+    
 private boolean matchesCreateItemFilter(
         Material material,
         String filter
@@ -487,10 +516,48 @@ private boolean matchesCreateItemFilter(
             case MY_ORDERS -> openMyOrders(player);
             case CREATE_OPEN -> openCreate(player);
             case CREATE_DECLINE -> openMyOrders(player);
-            case CREATE_ITEM -> openCreateItemBrowser(player,session.createState(),0);
+            case CREATE_ITEM ->
+        openCreateItemBrowser(
+                player,
+                session.createState(),
+                0,
+                "",
+                "ALL"
+        );
 
 case CREATE_ITEM_PREVIOUS,CREATE_ITEM_NEXT ->
-        openCreateItemBrowser(player,session.createState(),(int)action.amount());
+        openCreateItemBrowser(
+                player,
+                session.createState(),
+                (int)action.amount(),
+                session.itemSearch(),
+                session.itemFilter()
+        );
+
+case CREATE_ITEM_SEARCH ->
+        requestCreateItemSearch(
+                player,
+                session.createState(),
+                session.itemFilter()
+        );
+
+case CREATE_ITEM_FILTER ->
+        openCreateItemBrowser(
+                player,
+                session.createState(),
+                0,
+                session.itemSearch(),
+                nextCreateItemFilter(session.itemFilter())
+        );
+
+case CREATE_ITEM_CLEAR ->
+        openCreateItemBrowser(
+                player,
+                session.createState(),
+                0,
+                "",
+                "ALL"
+        );
 
 case CREATE_ITEM_SELECT -> {
     Material material=Material.matchMaterial(action.value());
@@ -533,6 +600,27 @@ case CREATE_ITEM_SELECT -> {
 
     private void refresh(Player player,MenuSession session){long now=System.currentTimeMillis(),previous=lastRefresh.getOrDefault(player.getUniqueId(),0L),cooldown=configs.settings().performance().guiRefreshCooldownMillis();if(now-previous<cooldown&&!player.hasPermission("wmorder.bypass.cooldown")){failure(player,"cooldown",Long.toString((cooldown-(now-previous)+999)/1000));return;}lastRefresh.put(player.getUniqueId(),now);queries.invalidate();if(session.type()==MenuType.COLLECTION)openCollection(player);else if(session.type()==MenuType.HISTORY)openHistory(player,0);else openBrowser(player,session.query(),session.type());}
     private void requestSearch(Player player,OrderQuery query,MenuType type){if(!searchLimiter.tryAcquire(player.getUniqueId())){messages.send(player,"search-rate-limited");return;}messages.send(player,"input-search");inputs.request(player,text->{if(text.equalsIgnoreCase("cancel")){messages.send(player,"input-cancelled");openBrowser(player,query,type);}else openBrowser(player,query.withSearch(text),type);});}
+    private void requestCreateItemSearch(
+        Player player,
+        CreateState state,
+        String filter
+){
+    inputs.requestSign(
+            player,
+            "",
+            text->{
+                String search=text.trim();
+
+                openCreateItemBrowser(
+                        player,
+                        state,
+                        0,
+                        search,
+                        filter
+                );
+            }
+    );
+}
     private void requestAmount(Player player,CreateState state){
     LimitProfile profile=limits.resolve(player);
     long max=profile.maxQuantityPerOrder();
