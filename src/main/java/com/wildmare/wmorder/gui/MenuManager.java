@@ -90,19 +90,62 @@ if(type == MenuType.MY_ORDERS){
     }
 
     public void openCreate(Player player){
-        ItemStack held=player.getInventory().getItemInMainHand();if(held.getType().isAir()){failure(player,"invalid_item","Hold the requested item in your main hand");return;}
-        LimitProfile profile=limits.resolve(player);String category=configs.categories().categoryFor(held.getType());CreateState state=new CreateState(held,Math.min(held.getMaxStackSize(),profile.maxQuantityPerOrder()),null,profile.duration(),category,UUID.randomUUID());openCreate(player,state);
+    LimitProfile profile=limits.resolve(player);
+    CreateState state=new CreateState(
+            null,
+            1,
+            null,
+            profile.duration(),
+            null,
+            UUID.randomUUID()
+    );
+    openCreate(player,state);
+}
+
+private void openCreate(Player player,CreateState state){
+    MenuSession session=sessions.create(player,MenuType.CREATE);
+    session.createState(state);
+
+    Inventory inv=createInventory(
+            session,
+            "create",
+            Map.of("page",1,"order","")
+    );
+
+    String itemName=state.hasItem()
+            ? state.item().getType().name()
+            : "Not selected";
+
+    inv.setItem(11,items.button(
+            "create-item",
+            Map.of("item",itemName)
+    ));
+    session.action(11,GuiAction.simple(GuiAction.Type.CREATE_ITEM));
+
+    inv.setItem(13,items.button(
+            "create-amount",
+            Map.of("amount",state.quantity())
+    ));
+    session.action(13,GuiAction.simple(GuiAction.Type.CREATE_AMOUNT));
+
+    inv.setItem(15,items.button(
+            "create-price",
+            Map.of("price",state.price()==null?"Not set":state.price())
+    ));
+    session.action(15,GuiAction.simple(GuiAction.Type.CREATE_PRICE));
+
+    inv.setItem(20,items.button("create-decline",Map.of()));
+    session.action(20,GuiAction.simple(GuiAction.Type.CREATE_DECLINE));
+
+    inv.setItem(24,items.button("confirm",Map.of()));
+
+    if(state.hasItem() && state.price()!=null){
+        session.action(24,GuiAction.simple(GuiAction.Type.CREATE_CONFIRM));
     }
 
-    private void openCreate(Player player,CreateState state){
-        MenuSession session=sessions.create(player,MenuType.CREATE);session.createState(state);Inventory inv=createInventory(session,"create",Map.of("page",1,"order",""));
-        ItemStack preview=state.item();preview.setAmount(1);appendLore(preview,List.of("<gray>Requested quantity: <white>"+state.quantity(),"<gray>Duration: <white>"+DurationParser.compact(state.duration()),"<gray>Category: <white>"+Objects.toString(state.category(),"none")));inv.setItem(13,preview);
-        put(inv,session,9,"quantity-minus",Map.of("amount",64),new GuiAction(GuiAction.Type.CREATE_QUANTITY,null,-64,null));put(inv,session,10,"quantity-minus",Map.of("amount",10),new GuiAction(GuiAction.Type.CREATE_QUANTITY,null,-10,null));put(inv,session,11,"quantity-minus",Map.of("amount",1),new GuiAction(GuiAction.Type.CREATE_QUANTITY,null,-1,null));
-        put(inv,session,15,"quantity-plus",Map.of("amount",1),new GuiAction(GuiAction.Type.CREATE_QUANTITY,null,1,null));put(inv,session,16,"quantity-plus",Map.of("amount",10),new GuiAction(GuiAction.Type.CREATE_QUANTITY,null,10,null));put(inv,session,17,"quantity-plus",Map.of("amount",64),new GuiAction(GuiAction.Type.CREATE_QUANTITY,null,64,null));
-        inv.setItem(22,items.button("price-input",Map.of("price",state.price()==null?"not set":state.price())));session.action(22,GuiAction.simple(GuiAction.Type.CREATE_PRICE));
-        if(state.price()!=null){inv.setItem(26,items.button("confirm",Map.of()));session.action(26,GuiAction.simple(GuiAction.Type.CREATE_CONFIRM));}else inv.setItem(26,items.button("empty",Map.of()));
-        items.fill(inv);player.openInventory(inv);
-    }
+    items.fill(inv);
+    player.openInventory(inv);
+}
 
     public void openDetails(Player player,UUID orderId){queries.find(orderId).thenAccept(optional->MainThread.run(plugin,()->{
         if(optional.isEmpty()){failure(player,"order_not_found","Order not found");return;}BuyOrder order=optional.get();MenuSession session=sessions.create(player,MenuType.DETAILS);Inventory inv=createInventory(session,"details",Map.of("order",OrderService.shortId(order.id()),"page",1));
