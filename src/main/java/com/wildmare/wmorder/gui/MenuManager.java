@@ -164,6 +164,7 @@ private void openCreate(Player player,CreateState state){
             case SEARCH -> requestSearch(player,session.query(),session.type());
             case MY_ORDERS -> openMyOrders(player);
             case CREATE_OPEN -> openCreate(player);
+            case CREATE_DECLINE -> openMyOrders(player);
             case COLLECTION -> openCollection(player);
             case HISTORY -> openHistory(player,0);
             case DETAILS -> openDetails(player,action.orderId());
