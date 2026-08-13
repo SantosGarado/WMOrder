@@ -334,7 +334,43 @@ case CREATE_ITEM_SELECT -> {
             }
     );
 }
-    private void requestPrice(Player player,CreateState state){messages.send(player,"input-price");inputs.request(player,text->{if(text.equalsIgnoreCase("cancel")){messages.send(player,"input-cancelled");openCreate(player,state);return;}try{BigDecimal price=money.normalize(new BigDecimal(text.replace(",","")));if(price.signum()<=0)throw new NumberFormatException();state.price(price);openCreate(player,state);}catch(NumberFormatException|ArithmeticException e){messages.send(player,"invalid-number");openCreate(player,state);}});}
+    private void requestPrice(Player player,CreateState state){
+    String current=state.price()==null
+            ? ""
+            : state.price().toPlainString();
+
+    inputs.requestSign(
+            player,
+            current,
+            text->{
+                String value=text.trim().replace(",",".");
+
+                if(value.isEmpty()){
+                    openCreate(player,state);
+                    return;
+                }
+
+                try{
+                    BigDecimal price=money.normalize(
+                            new BigDecimal(value)
+                    );
+
+                    if(price.signum()<=0){
+                        messages.send(player,"invalid-number");
+                        openCreate(player,state);
+                        return;
+                    }
+
+                    state.price(price);
+                    openCreate(player,state);
+
+                }catch(NumberFormatException e){
+                    messages.send(player,"invalid-number");
+                    openCreate(player,state);
+                }
+            }
+    );
+}
     private void adjustQuantity(Player player,CreateState state,long delta){LimitProfile profile=limits.resolve(player);long max=profile.maxQuantityPerOrder();long updated;try{updated=Math.addExact(state.quantity(),delta);}catch(ArithmeticException e){updated=delta>0?max:1;}state.quantity(Math.max(1,Math.min(max,updated)));openCreate(player,state);}
 
     private void confirmCreate(Player player,CreateState state){if(state.price()==null){messages.send(player,"invalid-number");return;}MenuSession session=sessions.create(player,MenuType.CONFIRM_CREATE);session.createState(state);Inventory inv=createInventory(session,"confirm",Map.of("page",1,"order",""));ItemStack icon=state.item();icon.setAmount(1);BigDecimal gross=money.multiply(state.price(),state.quantity());MoneyBreakdown breakdown=prices.creation(gross,limits.resolve(player));appendLore(icon,List.of("<gray>Quantity: <white>"+state.quantity(),"<gray>Price each: <white>"+state.price(),"<gray>Order value: <white>"+gross,"<gray>Fees: <yellow>"+breakdown.totalFee(),"<gray>Deposit: <green>"+breakdown.netOrDeposit()));inv.setItem(13,icon);inv.setItem(11,items.button("cancel",Map.of()));session.action(11,GuiAction.simple(GuiAction.Type.BACK));inv.setItem(15,items.button("confirm",Map.of()));session.action(15,GuiAction.simple(GuiAction.Type.CREATE_EXECUTE));items.fill(inv);player.openInventory(inv);}
